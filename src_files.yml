@@ -6,7 +6,6 @@ Klessydra-S1:
     klessydra-s1/PKG_RiscV_Klessydra_parameters.vhd,
     klessydra-s1/PKG_RiscV_Klessydra.vhd,
     klessydra-s1/RTL-IF_STAGE.vhd,
-    klessydra-s1/PKG_RiscV_Klessydra.vhd,
     klessydra-s1/RTL-Load_Store_Unit.vhd,
     klessydra-s1/RTL-Accumulator.vhd,
     klessydra-s1/RTL-Processing_Pipeline.vhd,

@@ -66,8 +66,7 @@ entity Program_Counter is
     mepc_interrupt_pc                 : out array_2D(THREAD_POOL_SIZE - 1 downto 0)(31 downto 0);
     irq_pending                       : out std_logic_vector(THREAD_POOL_SIZE - 1 downto 0);
     PC_offset_ID                      : in array_2D(THREAD_POOL_SIZE-1 downto 0)(31 downto 0);
-    set_branch_condition_ID                         : in std_logic;
-    set_jal_condition_ID                         : in std_logic;
+    set_branch_condition_ID           : in std_logic;
     clk_i                             : in  std_logic;
     rst_ni                            : in  std_logic;
     irq_i                             : in  std_logic;

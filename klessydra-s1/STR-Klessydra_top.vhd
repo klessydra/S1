@@ -510,6 +510,7 @@ architecture Klessydra_S1 of klessydra_s1_core is
     regfile                    : out array_3d(harc_range)(RF_SIZE-1 downto 0)(31 downto 0);
     PC_offset_ID               : out array_2D(harc_range)(31 downto 0);
     set_branch_condition_ID    : out std_logic;
+    harc_sleep                 : in  std_logic_vector(THREAD_POOL_SIZE-1 downto 0);
 
     -- clock, reset active low, test enable
     clk_i                      : in  std_logic;
@@ -822,6 +823,7 @@ begin
       regfile                    => regfile,
       PC_offset_ID               => PC_offset_ID,
       set_branch_condition_ID    => set_branch_condition_ID,
+      harc_sleep                 => harc_sleep,
       clk_i                      => clk_i,
       rst_ni                     => rst_ni,
       instr_req_o                => instr_req_o,
