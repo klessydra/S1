@@ -81,14 +81,17 @@ entity ID_STAGE is
     instr_word_ID_lat          : in  std_logic_vector(31 downto 0);
     spm_rs1                    : out std_logic;
     spm_rs2                    : out std_logic;
-    harc_sleep                 : in  std_logic_vector(THREAD_POOL_SIZE-1 downto 0);
     signed_op                  : out std_logic;
     harc_EXEC                  : out integer range THREAD_POOL_SIZE-1 downto 0;
     branch_instr               : in  std_logic;
     absolute_jump              : in  std_logic;
+    served_irq                 : std_logic_vector(THREAD_POOL_SIZE-1 downto 0);
     LS_WB_EN                   : in  std_logic;
     IE_WB_EN                   : in  std_logic;
     MUL_WB_EN                  : in  std_logic;
+    LS_WB_EN_wire              : in  std_logic;
+    IE_WB_EN_wire              : in  std_logic;
+    MUL_WB_EN_wire             : in  std_logic;
     instr_word_LS_WB           : in  std_logic_vector(31 downto 0);
     instr_word_IE_WB           : in  std_logic_vector(31 downto 0);
     vec_read_rs1_ID            : out std_logic;
@@ -100,6 +103,7 @@ entity ID_STAGE is
 
     -- branch predictin
     branch_miss                : in std_logic;
+    flush_decode               : in std_logic;
     branch_taken               : out std_logic;
     -- clock, reset active low
     clk_i                      : in  std_logic;
@@ -107,6 +111,7 @@ entity ID_STAGE is
     );
 
 end entity;  ------------------------------------------
+
 
 
 -- Klessydra T03x (4 stages) pipeline implementation -----------------------
@@ -134,6 +139,8 @@ architecture DECODE of ID_STAGE is
   signal exec_ready              : std_logic;
 
   signal instr_rvalid_ID_int_lat : std_logic;
+  --signal block_ls_valid_wb       : std_logic;
+  signal block_valid_wb          : std_logic;
 
   -- branch prediction
   signal branch_taken_wire       : std_logic;
@@ -175,7 +182,7 @@ begin
     elsif rising_edge(clk_i) then
       ls_instr_req <= '0';
       ie_instr_req <= '0';
-      if core_busy_IE = '1' or core_busy_LS = '1' or ls_parallel_exec = '0'  or dsp_parallel_exec = '0' or data_dependency = '1' or branch_miss = '1' then -- the instruction pipeline is halted
+      if core_busy_IE = '1' or core_busy_LS = '1' or ls_parallel_exec = '0'  or dsp_parallel_exec = '0' or data_dependency = '1' or branch_miss = '1' or flush_decode = '1' then -- the instruction pipeline is halted
         halt_IE  <= '1';
         halt_LSU <= '1';
         instr_rvalid_IE <= '0';
@@ -694,38 +701,38 @@ begin
     branch_stall      <= '0';
     jalr_stall        <= '0';
     branch_taken_wire <= '0';
-    if (instr_rvalid_ID_int = '1') and (harc_sleep /= (harc_range => '0')) then
+    if (instr_rvalid_ID_int = '1' and branch_miss = '0' and flush_decode = '0' ) then
       case OPCODE_wires is
 
-          when OP_IMM =>                -- OP_IMM instruction
+          when OP_IMM => -- OP_IMM instruction
             rs1_valid <= '1';
             rd_valid  <= '1';
-          
-          when LUI =>                   -- LUI instruction
+
+          when LUI => -- LUI instruction
             rd_valid  <= '1';
-          
-          when AUIPC =>                 -- AUIPC instruction
+
+          when AUIPC => -- AUIPC instruction
             rd_valid  <= '1';
-          
+
           when OP =>      
             rs1_valid <= '1';
             rs2_valid <= '1';
             rd_valid  <= '1';
-          
-          when JAL =>                   -- JAL instruction
+
+          when JAL => -- JAL instruction
             rd_valid  <= '1';
           
             set_branch_condition_ID <= '1';
             PC_offset_ID(harc_ID) <= UJ_immediate(instr_word_ID_lat);
-    
-          when JALR =>                  -- JALR instruction
+
+          when JALR => -- JALR instruction
             rs1_valid <= '1';
             rd_valid  <= '1';
             if absolute_jump = '0' then
               jalr_stall <= '1';
             end if;
-    
-          when BRANCH =>      -- BRANCH instruction         
+
+          when BRANCH => -- BRANCH instruction         
             rs1_valid  <= '1';
             rs2_valid  <= '1';
             if branch_predict_en = 0 then
@@ -738,16 +745,15 @@ begin
                 branch_taken_wire  <= '1';
                 PC_offset_ID(harc_ID) <= B_immediate(instr_word_ID_lat);
               end if;
-            end if;
-            
-                
+            end if;    
+
           when LOAD =>
             rs1_valid <= '1';
             rd_valid  <= '1';
     
           when STORE =>
             rs1_valid <= '1';
-            rs2_valid  <= '1';
+            rs2_valid <= '1';
         
           when SYSTEM =>
             rs1_valid <= '1';
@@ -763,7 +769,6 @@ begin
             rs2_valid <= '1';
             rd_read_valid  <= '1';
 
-    
           when KDSP =>
             rs1_valid <= '1';
             rs2_valid <= '1';
@@ -776,18 +781,23 @@ begin
         -- Decode OF INSTRUCTION (END) --------------------------
   end process;
 
-
   valid_buf_control_sync : process (clk_i, rst_ni)
   begin
     if rst_ni = '0' then
-      valid_buf <= (others => '1');
+      valid_buf     <= (others => '1');
     elsif rising_edge(clk_i) then
-      valid_buf <= valid_buf_wire;
-      if branch_miss = '0' then
-        if  rd_valid = '1' and exec_ready = '1' then
-          if (rd(instr_word_ID_lat) /= 0) then
-            valid_buf( rd(instr_word_ID_lat) ) <= '0';
-          end if;
+      valid_buf     <= valid_buf_wire;
+      if ( LS_WB_EN_wire = '1' or IE_WB_EN_wire = '1' or MUL_WB_EN_wire = '1' ) and rd_valid = '1' and 
+         ( rd(instr_word_ID_lat) = rd(instr_word_IE))  and not 
+         ( rd(instr_word_ID_lat) = rs1(instr_word_ID_lat) and rs1_valid = '1') and not
+         ( rd(instr_word_ID_lat) = rs2(instr_word_ID_lat) and rs2_valid = '1') then
+        block_valid_wb <= '1';
+      else
+        block_valid_wb <= '0';
+      end if;
+      if  rd_valid = '1' and exec_ready = '1' then
+        if (rd(instr_word_ID_lat) /= 0) then
+          valid_buf( rd(instr_word_ID_lat) ) <= '0'; 
         end if;
       end if;
     end if;
@@ -796,43 +806,46 @@ begin
   valid_buf_control_comb : process (all)
   begin
     valid_buf_wire <= valid_buf;
-    if IE_WB_EN = '1' or MUL_WB_EN = '1' then
+    if (IE_WB_EN = '1' or MUL_WB_EN = '1' ) and block_valid_wb = '0' then
       valid_buf_wire( rd(instr_word_IE_WB) ) <= '1';
     end if;
-    if LS_WB_EN = '1' then
+    if LS_WB_EN = '1' and block_valid_wb = '0' then
       valid_buf_wire( rd(instr_word_LS_WB) ) <= '1';
+    end if;
+    if served_irq(harc_EXEC) = '1' then
+      valid_buf_wire <= (others => '1');
     end if;
   end process;
 
 
-  data_dep_checker_comb : process(all)
+  data_dep_checker_comb : process (all)
   begin
     data_dependency       <= '0';
     data_dependency_rs1   <= '0';
     data_dependency_rs2   <= '0';
-    exec_ready         <= '0';
-    if core_busy_IE = '0' and core_busy_LS = '0' and ls_parallel_exec = '1'  and dsp_parallel_exec = '1' and data_dependency = '0'then -- the instruction pipeline is halted
+    exec_ready            <= '0';
+    if core_busy_IE = '0' and core_busy_LS = '0' and ls_parallel_exec = '1'  and dsp_parallel_exec = '1' and data_dependency = '0' then -- the instruction pipeline is halted
       exec_ready <= '1';
     end if;
     if instr_rvalid_ID_int = '1' then
       if rs1_valid = '1' or rs2_valid = '1' then
         if valid_buf_wire( rs1(instr_word_ID_lat) ) = '0' and rs1_valid = '1' then
-          data_dependency <= '1';
+            data_dependency <= '1';
         end if; 
         if valid_buf_wire( rs2(instr_word_ID_lat) ) = '0' and rs2_valid = '1' then
-          data_dependency <= '1';
+            data_dependency <= '1';
         end if; 
-        if valid_buf( rs1(instr_word_ID_lat) ) = '0' and rs1_valid = '1' then
-          data_dependency_rs1 <= '1';
+        if ( valid_buf( rs1(instr_word_ID_lat) ) = '0' and rs1_valid = '1' ) then --or ( block_ls_valid_wb = '1' and rs1_valid = '1' )    then
+            data_dependency_rs1 <= '1';
         end if; 
-        if valid_buf( rs2(instr_word_ID_lat) ) = '0' and rs2_valid = '1' then
-          data_dependency_rs2 <= '1';
-        end if; 
+        if ( valid_buf( rs2(instr_word_ID_lat) ) = '0' and rs2_valid = '1' ) then --or ( block_ls_valid_wb = '1' and rs2_valid = '1' )  then
+            data_dependency_rs2 <= '1';
+        end if;
       end if; 
     end if; 
   end process;
 
-instr_rvalid_ID_int <= instr_rvalid_ID or instr_rvalid_ID_int_lat when instr_rvalid_IE = '0' else instr_rvalid_ID;
+  instr_rvalid_ID_int <= instr_rvalid_ID or instr_rvalid_ID_int_lat when instr_rvalid_IE = '0' else instr_rvalid_ID;
 
   process(clk_i, rst_ni)
   begin

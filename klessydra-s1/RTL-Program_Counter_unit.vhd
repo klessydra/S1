@@ -65,8 +65,8 @@ entity Program_Counter is
     mepc_incremented_pc               : out array_2D(THREAD_POOL_SIZE - 1 downto 0)(31 downto 0);
     mepc_interrupt_pc                 : out array_2D(THREAD_POOL_SIZE - 1 downto 0)(31 downto 0);
     irq_pending                       : out std_logic_vector(THREAD_POOL_SIZE - 1 downto 0);
-    PC_offset_ID                      : in array_2D(THREAD_POOL_SIZE-1 downto 0)(31 downto 0);
-    set_branch_condition_ID           : in std_logic;
+    PC_offset_ID                      : in  array_2D(THREAD_POOL_SIZE-1 downto 0)(31 downto 0);
+    set_branch_condition_ID           : in  std_logic;
     clk_i                             : in  std_logic;
     rst_ni                            : in  std_logic;
     irq_i                             : in  std_logic;
@@ -261,7 +261,11 @@ begin
      (others => '0');
 
 
-    pc_update_enable(h) <= '1' when instr_gnt_i = '1' else '0';
+    pc_update_enable(h) <= '1' when (instr_gnt_i = '1' 
+                                or taken_branch_replicated(h) = '1'
+                                or set_wfi_condition_replicated(h) = '1'
+                                or taken_branch_pending_internal(h) = '1')
+                                else '0';
 
     pc_update_sync : process (clk_i, rst_ni)
 

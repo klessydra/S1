@@ -134,6 +134,13 @@ architecture CSR of CSR_Unit is
   signal MIP_7         : std_logic;
   signal MIP_11        : std_logic;
 
+  -- exception routine
+  signal served_except_condition_lat  : std_logic_vector(THREAD_POOL_SIZE -1 downto 0);
+  signal served_ie_except_condition_lat  : std_logic_vector(THREAD_POOL_SIZE -1 downto 0);
+  signal served_ls_except_condition_lat  : std_logic_vector(THREAD_POOL_SIZE -1 downto 0);
+  signal served_dsp_except_condition_lat : std_logic_vector(THREAD_POOL_SIZE -1 downto 0);
+
+
   -- Interface signals from EXEC unit to CSR management unit
 
   -- CSR management unit internal signal
@@ -236,7 +243,15 @@ begin
         csr_access_denied_o_replicated(h) <= '0';
         csr_rdata_o_replicated(h)         <= (others => '0');
 
+
+        served_except_condition_lat(h)      <= '0';
+        served_ie_except_condition_lat(h)   <= '0';
+        served_ls_except_condition_lat(h)   <= '0';
+        served_dsp_except_condition_lat(h)  <= '0';
+
+
       elsif rising_edge(clk_i) then
+
         -- CSR updating for all possible sources follows.
         --       ext. int., sw int., timer int., exceptions.
         --       We update CSR following this order, the software interrupt vector manager follows
@@ -252,7 +267,12 @@ begin
         --  ██║██║  ██║╚██████╔╝██╔╝   ███████╗██╔╝ ██╗╚██████╗███████╗██║        ██║       ██║  ██║██║  ██║██║ ╚████║██████╔╝███████╗███████╗██║  ██║  --
         --  ╚═╝╚═╝  ╚═╝ ╚══▀▀═╝ ╚═╝    ╚══════╝╚═╝  ╚═╝ ╚═════╝╚══════╝╚═╝        ╚═╝       ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═══╝╚═════╝ ╚══════╝╚══════╝╚═╝  ╚═╝  --
         --------------------------------------------------------------------------------------------------------------------------------------------------        
-                                                                                                                    
+        
+        served_ie_except_condition_lat(h)   <= served_ie_except_condition(h);
+        served_ls_except_condition_lat(h)   <= served_ls_except_condition(h);
+        served_dsp_except_condition_lat(h)  <= served_dsp_except_condition(h);
+        served_except_condition_lat(h)      <= served_except_condition(h);
+
         -- synchronous assignment to MIP_internal bits:
         -- this is Pulpino-specific assignment, i.e. the timer-related IRQ vector value
         if h = 0 and unsigned(irq_id_i) >= 28 and irq_i = '1' then
@@ -313,16 +333,16 @@ begin
           MSTATUS_internal(h)(1) <= MSTATUS_internal(h)(0);
           
         --  Exception-caused CSR updating ----------------------------------
-        elsif served_except_condition(h) = '1' then
-          if served_dsp_except_condition(h) = '1' then
+        elsif served_except_condition_lat(h) = '1' then
+          if served_dsp_except_condition_lat(h) = '1' then
             if replicate_accl_en = 1 then
               MCAUSE_internal(h)     <= dsp_except_data(h);  -- passed from DSP Unit
             elsif replicate_accl_en = 0 then
               MCAUSE_internal(h)     <= dsp_except_data(0);  -- passed from DSP Unit
             end if;
-          elsif served_ls_except_condition(h) = '1' then
+          elsif served_ls_except_condition_lat(h) = '1' then
             MCAUSE_internal(h)     <= ls_except_data;  -- passed from LS unit
-          elsif served_ie_except_condition(h) = '1' then
+          elsif served_ie_except_condition_lat(h) = '1' then
             MCAUSE_internal(h)     <= ie_except_data;  -- passed from IE Stage
           end if;
           MESTATUS(h)(2 downto 1)        <= MSTATUS_internal(h);

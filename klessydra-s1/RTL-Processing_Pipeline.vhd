@@ -108,7 +108,6 @@ entity Pipeline is
     regfile                    : out array_3d(THREAD_POOL_SIZE-1 downto 0)(RF_SIZE-1 downto 0)(31 downto 0);
     PC_offset_ID               : out array_2D(THREAD_POOL_SIZE-1 downto 0)(31 downto 0);
     set_branch_condition_ID    : out std_logic;
-    harc_sleep                 : in  std_logic_vector(THREAD_POOL_SIZE-1 downto 0);
 
     -- clock, reset active low, test enable
     clk_i                      : in  std_logic;
@@ -178,6 +177,9 @@ architecture Pipe of Pipeline is
   signal IE_WB                  : std_logic_vector(31 downto 0);
   signal MUL_WB_EN              : std_logic;
   signal MUL_WB                 : std_logic_vector(31 downto 0);
+  signal LS_WB_EN_wire          : std_logic;
+  signal IE_WB_EN_wire          : std_logic;
+  signal MUL_WB_EN_wire         : std_logic;
 
   signal comparator_en : std_logic;
 
@@ -289,6 +291,7 @@ architecture Pipe of Pipeline is
   signal tracer_result               : std_logic_vector(31 downto 0);
 
   signal branch_miss                 : std_logic;
+  signal flush_decode                : std_logic;
   signal branch_taken                : std_logic; 
 
 
@@ -387,14 +390,17 @@ architecture Pipe of Pipeline is
     instr_word_ID_lat          : in  std_logic_vector(31 downto 0);
     branch_instr               : in  std_logic;
     absolute_jump              : in  std_logic;
+    served_irq                 : in std_logic_vector(THREAD_POOL_SIZE-1 downto 0);
     LS_WB_EN                   : in  std_logic;
     IE_WB_EN                   : in  std_logic;
     MUL_WB_EN                  : in  std_logic;
+    LS_WB_EN_wire              : in  std_logic;
+    IE_WB_EN_wire              : in  std_logic;
+    MUL_WB_EN_wire             : in  std_logic;
     instr_word_LS_WB           : in  std_logic_vector(31 downto 0);
     instr_word_IE_WB           : in  std_logic_vector(31 downto 0);
     spm_rs1                    : out std_logic;
     spm_rs2                    : out std_logic;
-    harc_sleep                 : in  std_logic_vector(harc_range);
     --sw_mip                     : out std_logic;
     signed_op                  : out std_logic;
     harc_EXEC                  : out integer range THREAD_POOL_SIZE-1 downto 0;
@@ -405,6 +411,7 @@ architecture Pipe of Pipeline is
     PC_offset_ID               : out array_2D(harc_range)(31 downto 0);
     set_branch_condition_ID    : out std_logic;
     branch_miss                : in  std_logic;
+    flush_decode               : in  std_logic;
     branch_taken               : out std_logic; 
 
     -- clock, reset active low
@@ -478,6 +485,7 @@ architecture Pipe of Pipeline is
     ls_sc_data_write_wire      : out std_logic_vector(Data_Width-1 downto 0);
     -- WB_Stage Signals
     LS_WB_EN                   : out std_logic;
+    LS_WB_EN_wire              : out std_logic;
     harc_LS_WB                 : out harc_range;
     instr_word_LS_WB           : out std_logic_vector(31 downto 0);
     LS_WB                      : out std_logic_vector(31 downto 0);
@@ -526,7 +534,6 @@ architecture Pipe of Pipeline is
     taken_branch           : in  std_logic;
     halt_IE                : in  std_logic;
     decoded_instruction_IE : in  std_logic_vector(EXEC_UNIT_INSTR_SET_SIZE-1 downto 0);
-    harc_sleep             : in  std_logic_vector(THREAD_POOL_SIZE-1 downto 0);
     csr_addr_i             : out std_logic_vector(11 downto 0);
     ie_except_data         : out std_logic_vector(31 downto 0);
     ie_csr_wdata_i         : out std_logic_vector(31 downto 0);
@@ -554,13 +561,16 @@ architecture Pipe of Pipeline is
     absolute_jump          : out std_logic;
     instr_word_IE_WB       : out std_logic_vector (31 downto 0);
     IE_WB_EN               : out std_logic;
+    IE_WB_EN_wire          : out std_logic;
     IE_WB                  : out std_logic_vector(31 downto 0);
     MUL_WB_EN              : out std_logic;
+    MUL_WB_EN_wire         : out std_logic;
     MUL_WB                 : out std_logic_vector(31 downto 0);
     harc_IE_WB             : out  integer range THREAD_POOL_SIZE-1 downto 0;
     pc_WB                  : out std_logic_vector(31 downto 0);
     state_IE               : out fsm_IE_states;
     branch_miss            : out std_logic;
+    flush_decode           : out  std_logic;    
     branch_taken           : in std_logic 
   );
   end component;  ------------------------------------------
@@ -842,16 +852,20 @@ begin
     instr_word_ID_lat          => instr_word_ID_lat,
     branch_instr               => branch_instr,
     absolute_jump              => absolute_jump,
+    served_irq                 => served_irq,
     LS_WB_EN                   => LS_WB_EN,
     IE_WB_EN                   => IE_WB_EN,
     MUL_WB_EN                  => MUL_WB_EN,
+    LS_WB_EN_wire              => LS_WB_EN_wire,
+    IE_WB_EN_wire              => IE_WB_EN_wire,
+    MUL_WB_EN_wire             => MUL_WB_EN_wire,
     instr_word_LS_WB           => instr_word_LS_WB,
     instr_word_IE_WB           => instr_word_IE_WB,
     spm_rs1                    => spm_rs1,
     spm_rs2                    => spm_rs2,
     branch_miss                => branch_miss,
+    flush_decode               => flush_decode,
     branch_taken               => branch_taken,
-    harc_sleep                 => harc_sleep,
     --sw_mip                     => sw_mip,
     signed_op                  => signed_op,
     harc_EXEC                  => harc_EXEC,
@@ -922,7 +936,8 @@ begin
     ls_sc_read_addr            => ls_sc_read_addr,
     ls_sc_write_addr           => ls_sc_write_addr,
     ls_sc_data_write_wire      => ls_sc_data_write_wire,
-    LS_WB_EN                   => LS_WB_EN,  
+    LS_WB_EN                   => LS_WB_EN,
+    LS_WB_EN_wire              => LS_WB_EN_wire,
     harc_LS_WB                 => harc_LS_WB,
     instr_word_LS_WB           => instr_word_LS_WB,
     LS_WB                      => LS_WB,
@@ -969,7 +984,6 @@ begin
     taken_branch               => taken_branch,
     halt_IE                    => halt_IE,
     decoded_instruction_IE     => decoded_instruction_IE,
-    harc_sleep                 => harc_sleep,
     csr_addr_i                 => csr_addr_i,
     ie_except_data             => ie_except_data,
     ie_csr_wdata_i             => ie_csr_wdata_i,
@@ -997,13 +1011,16 @@ begin
     absolute_jump              => absolute_jump,
     instr_word_IE_WB           => instr_word_IE_WB,
     IE_WB_EN                   => IE_WB_EN,
+    IE_WB_EN_wire              => IE_WB_EN_wire,
     IE_WB                      => IE_WB,
     MUL_WB_EN                  => MUL_WB_EN,
+    MUL_WB_EN_wire             => MUL_WB_EN_wire,
     MUL_WB                     => MUL_WB,
     harc_IE_WB                 => harc_IE_WB,
     pc_WB                      => pc_WB,
     state_IE                   => state_IE,
     branch_miss                => branch_miss,
+    flush_decode               => flush_decode,    
     branch_taken               => branch_taken
   );
 
