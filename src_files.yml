@@ -4,6 +4,7 @@ Klessydra-S1:
   ]
   files: [
     klessydra-s1/PKG_RiscV_Klessydra_parameters.vhd,
+    klessydra-s1/PKG_RiscV_Klessydra.vhd,
     klessydra-s1/RTL-IF_STAGE.vhd,
     klessydra-s1/PKG_RiscV_Klessydra.vhd,
     klessydra-s1/RTL-Load_Store_Unit.vhd,
