@@ -8,7 +8,7 @@ Architecture: S1 as its S0 predecessor vesions is also a single hart processor, 
 
 PROCEDURE:
 
-To use Klessydra-M, please download [PULPino-Klessydra](https://github.com/klessydra/pulpino-klessydra) , and follow the guide over there. 
+To use Klessydra-S1, please download [PULPino-Klessydra](https://github.com/klessydra/pulpino-klessydra) , and follow the guide over there. 
 
 - For more details about the Klessydra processing cores, please refer to the technincal manual in Docs
 - For more details about the Klessydra runtime libraries, please refer to the software runtime manual in Docs
